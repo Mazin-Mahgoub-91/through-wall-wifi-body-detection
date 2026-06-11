@@ -1,0 +1,91 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>رادار الغلابة v1.0</title>
+<style>
+  body { background:#0a0a0a; color:#0f0; font-family:'Courier New'; text-align:center; }
+  h1 { text-shadow: 0 0 10px #0f0; }
+  #graph { border:2px solid #0f0; background:#000; margin:20px auto; }
+  #status { font-size:24px; margin:20px; }
+  #map { display:grid; grid-template-columns:1fr 1fr; gap:10px; width:300px; margin:20px auto; }
+  .room { border:2px solid #333; padding:40px; transition:0.3s; }
+  .active { border-color:#0f0; box-shadow:0 0 20px #0f0; background:#0f01; }
+</style>
+</head>
+<body>
+<h1>📡 رادار الغلابة - WiFi Motion Radar</h1>
+<div id="status">جاري الاتصال بالسيرفر...</div>
+<canvas id="graph" width="600" height="200"></canvas>
+<div id="map">
+  <div class="room" id="room1">الركن شمال<br>شمال</div>
+  <div class="room" id="room2">الركن شمال<br>يمين</div>
+  <div class="room" id="room3">الركن جنوب<br>شمال</div>
+  <div class="room" id="room4">الركن جنوب<br>يمين</div>
+</div>
+<div>التذبذب: <span id="stddev">0.00</span> | آخر نطة: <span id="jump">0.00</span> dBm</div>
+
+<script>
+// كلو جوا هنا - ما في ملفات خارجية
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+let data = Array(600).fill(-50);
+let ws;
+
+// اتصال بالسيرفر الصغيروني
+function connect() {
+  ws = new WebSocket('ws://localhost:8080');
+  
+  ws.onopen = () => {
+    document.getElementById('status').innerText = '🟢 متصل - امشي في الغرفة وجرب';
+  };
+  
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    
+    // تحديث الرسم البياني
+    data.shift();
+    data.push(msg.rssi);
+    drawGraph();
+    
+    // تحديث الأرقام
+    document.getElementById('stddev').innerText = msg.stdDev.toFixed(2);
+    document.getElementById('jump').innerText = msg.change.toFixed(1);
+    
+    // خريطة الـ 4 أركان الوهمية
+    document.querySelectorAll('.room').forEach(r=>r.classList.remove('active'));
+    if(msg.stdDev > 2.5) {
+      let room = Math.floor(Math.random()*4)+1; // دي حرفنة لحد ما نعمل المعايرة
+      document.getElementById('room'+room).classList.add('active');
+    }
+    
+    // تنبيه لو كائن غريب
+    if(msg.stdDev > 3.5 && msg.change > 12) {
+      document.getElementById('status').innerText = '👻 كائن مجهول مكتشف!';
+      setTimeout(()=>document.getElementById('status').innerText='🟢 متصل', 2000);
+    }
+  };
+  
+  ws.onclose = () => {
+    document.getElementById('status').innerText = '🔴 السيرفر واقف - شغل wifi_sensing.js أول';
+    setTimeout(connect, 3000);
+  };
+}
+
+function drawGraph() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,600,200);
+  ctx.strokeStyle = '#0f0';
+  ctx.beginPath();
+  data.forEach((val,i)=>{
+    let y = 100 + (val + 50) * 2; // تحويل -80 إلى -30 عشان الرسم
+    if(i==0) ctx.moveTo(i,y);
+    else ctx.lineTo(i,y);
+  });
+  ctx.stroke();
+}
+
+connect();
+</script>
+</body>
+</html>
